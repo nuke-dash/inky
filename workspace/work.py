@@ -290,11 +290,20 @@ def setup_buttons():
             print("Fetching latest image...")
             latest_image = get_latest_image_path()
             show_image(latest_image)
+        elif label == "D":
+            # Button D: Shutdown the Raspberry Pi
+            print("Shutdown button pressed! Shutting down in 2 seconds...")
+            stop_led_blinking()
+            set_led(False)
+            time.sleep(2)
+            os.system("sudo shutdown -h now")
 
     # Start LED blinking while waiting for button presses
     start_led_blinking()
     print("Ready! LED is blinking.")
-    print("Press button A for random image, button B for latest image.")
+    print("Press button A for random image")
+    print("Press button B for latest image.")
+    print("Press button D to shutdown the Raspberry Pi.")
 
     while True:
         for event in request.read_edge_events():
