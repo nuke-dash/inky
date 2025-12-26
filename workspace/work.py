@@ -23,6 +23,31 @@ led_blink_thread = None
 led_gpio_request = None
 led_line_offset = None
 
+def get_all_image_files(folder=synologyInkyPath):
+    """
+    Returns a list of all image file paths from the specified folder.
+    
+    Args:
+        folder: Path to the folder containing images
+        
+    Returns:
+        List of full paths to all image files
+        
+    Raises:
+        ValueError: If no valid image files are found in the folder
+    """
+    # Define supported image extensions
+    image_extensions = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
+    
+    # Get all image files from the folder
+    image_files = [f for f in os.listdir(folder) if f.lower().endswith(image_extensions)]
+    
+    if not image_files:
+        raise ValueError(f"No image files found in {folder}")
+    
+    # Return full paths
+    return [os.path.join(folder, f) for f in image_files]
+
 def get_random_image_path(folder=synologyInkyPath):
     """
     Returns a random image path from the specified folder.
@@ -36,17 +61,28 @@ def get_random_image_path(folder=synologyInkyPath):
     Raises:
         ValueError: If no valid image files are found in the folder
     """
-    # Define supported image extensions
-    image_extensions = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
+    all_images = get_all_image_files(folder)
+    return random.choice(all_images)
+
+def get_latest_image_path(folder=synologyInkyPath):
+    """
+    Returns the most recently modified image file path from the specified folder.
     
-    # Get all image files from the folder
-    imgs = [f for f in os.listdir(folder) if f.lower().endswith(image_extensions)]
+    Args:
+        folder: Path to the folder containing images
+        
+    Returns:
+        Full path to the most recently modified image file
+        
+    Raises:
+        ValueError: If no valid image files are found in the folder
+    """
+    all_images = get_all_image_files(folder)
     
-    if not imgs:
-        raise ValueError(f"No image files found in {folder}")
+    # Sort by modification time (most recent first)
+    latest_image = max(all_images, key=os.path.getmtime)
     
-    # Return a random image path
-    return os.path.join(folder, random.choice(imgs))
+    return latest_image
 
 def resize_image_aspect_fit(image, target_size, background_color="white"):
     """
@@ -157,7 +193,14 @@ def enable_led(enable):
     else:
         gpio.set_value(led, Value.INACTIVE)
 
-def show_image():
+def show_image(image_path=None):
+    """
+    Display an image on the Inky display.
+    
+    Args:
+        image_path: Optional path to image file. If not provided, will check command line args
+                    or use a random image.
+    """
     # Stop blinking and turn LED on solid while showing image
     stop_led_blinking()
     set_led(True)
@@ -173,8 +216,12 @@ def show_image():
 
     saturation = args.saturation
 
-    file = args.file
-    if not file:
+    # Determine which file to use (priority: function arg > command line arg > random)
+    if image_path:
+        file = image_path
+    elif args.file:
+        file = args.file
+    else:
         print("no file provided fetching random image")
         file = get_random_image_path()
 
@@ -232,12 +279,22 @@ def setup_buttons():
         gpio_number = BUTTONS[index]
         label = LABELS[index]
         print(f"Button press detected on GPIO #{gpio_number} label: {label}")
+        
         if label == "A":
-            show_image()
+            # Button A: Show random image
+            print("Fetching random image...")
+            random_image = get_random_image_path()
+            show_image(random_image)
+        elif label == "B":
+            # Button B: Show latest image
+            print("Fetching latest image...")
+            latest_image = get_latest_image_path()
+            show_image(latest_image)
 
     # Start LED blinking while waiting for button presses
     start_led_blinking()
-    print("Ready! LED is blinking. Press button A to show a random image.")
+    print("Ready! LED is blinking.")
+    print("Press button A for random image, button B for latest image.")
 
     while True:
         for event in request.read_edge_events():
