@@ -41,6 +41,50 @@ def get_random_image_path(folder=synologyInkyPath):
     # Return a random image path
     return os.path.join(folder, random.choice(imgs))
 
+def resize_image_aspect_fit(image, target_size, background_color="white"):
+    """
+    Resize an image to fit within target_size while maintaining aspect ratio.
+    Centers the image and fills the remaining space with the background color.
+    
+    Args:
+        image: PIL Image object
+        target_size: Tuple of (width, height) for the target display size
+        background_color: Color to use for letterbox/pillarbox areas (default: "white")
+        
+    Returns:
+        PIL Image object resized and centered with aspect ratio preserved
+    """
+    target_width, target_height = target_size
+    
+    # Calculate the aspect ratios
+    image_aspect = image.width / image.height
+    target_aspect = target_width / target_height
+    
+    # Determine the scaling factor to fit the image within the target size
+    if image_aspect > target_aspect:
+        # Image is wider - fit to width
+        new_width = target_width
+        new_height = int(target_width / image_aspect)
+    else:
+        # Image is taller - fit to height
+        new_height = target_height
+        new_width = int(target_height * image_aspect)
+    
+    # Resize the image maintaining aspect ratio
+    resized = image.resize((new_width, new_height), Image.LANCZOS)
+    
+    # Create a new image with the target size and background color
+    result = Image.new(image.mode, target_size, background_color)
+    
+    # Calculate position to center the resized image
+    x_offset = (target_width - new_width) // 2
+    y_offset = (target_height - new_height) // 2
+    
+    # Paste the resized image onto the background
+    result.paste(resized, (x_offset, y_offset))
+    
+    return result
+
 def enable_led(enable):
     LED_PIN = 13
     # Find the gpiochip device we need, we'll use
@@ -80,7 +124,7 @@ def show_image():
 
 
     image = Image.open(file)
-    resized_image = image.resize(inky.resolution)
+    resized_image = resize_image_aspect_fit(image, inky.resolution)
 
     try:
         inky.set_image(resized_image, saturation=saturation)
