@@ -88,4 +88,5 @@ except TypeError:
 
 inky.show()
 
+time.sleep(30)
 enable_led(False)
