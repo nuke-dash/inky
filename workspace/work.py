@@ -6,6 +6,7 @@ import pathlib
 import random
 import sys
 import time
+import threading
 import gpiod
 import gpiodevice
 from gpiod.line import Bias, Direction, Value, Edge
@@ -15,6 +16,12 @@ from PIL import Image
 from inky.auto import auto
 
 synologyInkyPath = "/mnt/synology/inky"
+
+# Global variables for LED blinking control
+led_blinking = False
+led_blink_thread = None
+led_gpio_request = None
+led_line_offset = None
 
 def get_random_image_path(folder=synologyInkyPath):
     """
@@ -85,6 +92,55 @@ def resize_image_aspect_fit(image, target_size, background_color="white"):
     
     return result
 
+def setup_led():
+    """Setup the LED GPIO pin and return the gpio request and line offset."""
+    global led_gpio_request, led_line_offset
+    
+    LED_PIN = 13
+    chip = gpiodevice.find_chip_by_platform()
+    led_line_offset = chip.line_offset_from_id(LED_PIN)
+    led_gpio_request = chip.request_lines(
+        consumer="inky-led", 
+        config={led_line_offset: gpiod.LineSettings(direction=Direction.OUTPUT, bias=Bias.DISABLED)}
+    )
+    return led_gpio_request, led_line_offset
+
+def set_led(state):
+    """Set the LED on or off."""
+    global led_gpio_request, led_line_offset
+    if led_gpio_request and led_line_offset is not None:
+        led_gpio_request.set_value(led_line_offset, Value.ACTIVE if state else Value.INACTIVE)
+
+def blink_led_worker():
+    """Worker function that blinks the LED every 500ms."""
+    global led_blinking
+    while led_blinking:
+        set_led(True)
+        time.sleep(0.5)
+        if not led_blinking:  # Check again before turning off
+            break
+        set_led(False)
+        time.sleep(0.5)
+
+def start_led_blinking():
+    """Start the LED blinking in a background thread."""
+    global led_blinking, led_blink_thread
+    
+    if not led_blinking:
+        led_blinking = True
+        led_blink_thread = threading.Thread(target=blink_led_worker, daemon=True)
+        led_blink_thread.start()
+
+def stop_led_blinking():
+    """Stop the LED blinking and turn it off."""
+    global led_blinking, led_blink_thread
+    
+    if led_blinking:
+        led_blinking = False
+        if led_blink_thread:
+            led_blink_thread.join(timeout=1.0)
+        set_led(False)
+
 def enable_led(enable):
     LED_PIN = 13
     # Find the gpiochip device we need, we'll use
@@ -102,7 +158,9 @@ def enable_led(enable):
         gpio.set_value(led, Value.INACTIVE)
 
 def show_image():
-    enable_led(True)
+    # Stop blinking and turn LED on solid while showing image
+    stop_led_blinking()
+    set_led(True)
 
     parser = argparse.ArgumentParser()
 
@@ -133,10 +191,13 @@ def show_image():
 
     inky.show()
 
-    time.sleep(30)
-    enable_led(False)
+    # Resume blinking after image is shown
+    start_led_blinking()
 
 def setup_buttons():
+    # Setup LED first
+    setup_led()
+    
     SW_A = 5
     SW_B = 6
     SW_C = 25
@@ -174,6 +235,9 @@ def setup_buttons():
         if label == "A":
             show_image()
 
+    # Start LED blinking while waiting for button presses
+    start_led_blinking()
+    print("Ready! LED is blinking. Press button A to show a random image.")
 
     while True:
         for event in request.read_edge_events():
