@@ -16,6 +16,7 @@ from PIL import Image
 from inky.auto import auto
 
 synologyInkyPath = "/mnt/synology/inky"
+synologyInkyComicPath = "/mnt/synology/inky/comics"
 
 # Global variables for LED blinking control
 led_blinking = False
@@ -23,7 +24,7 @@ led_blink_thread = None
 led_gpio_request = None
 led_line_offset = None
 
-def get_all_image_files(folder=synologyInkyPath):
+def get_all_image_files(folder):
     """
     Returns a list of all image file paths from the specified folder.
     
@@ -48,7 +49,7 @@ def get_all_image_files(folder=synologyInkyPath):
     # Return full paths
     return [os.path.join(folder, f) for f in image_files]
 
-def get_random_image_path(folder=synologyInkyPath):
+def get_random_image_path(folder):
     """
     Returns a random image path from the specified folder.
     
@@ -64,7 +65,7 @@ def get_random_image_path(folder=synologyInkyPath):
     all_images = get_all_image_files(folder)
     return random.choice(all_images)
 
-def get_latest_image_path(folder=synologyInkyPath):
+def get_latest_image_path(folder):
     """
     Returns the most recently modified image file path from the specified folder.
     
@@ -223,7 +224,7 @@ def show_image(image_path=None):
         file = args.file
     else:
         print("no file provided fetching random image")
-        file = get_random_image_path()
+        file = get_random_image_path(folder=synologyInkyPath)
 
     print(f"Selected image: {file}")
 
@@ -283,13 +284,18 @@ def setup_buttons():
         if label == "A":
             # Button A: Show random image
             print("Fetching random image...")
-            random_image = get_random_image_path()
+            random_image = get_random_image_path(folder=synologyInkyPath)
             show_image(random_image)
         elif label == "B":
             # Button B: Show latest image
             print("Fetching latest image...")
-            latest_image = get_latest_image_path()
+            latest_image = get_latest_image_path(folder=synologyInkyPath)
             show_image(latest_image)
+        if label == "C":
+            # Button A: Show random comic
+            print("Fetching random image...")
+            random_image = get_random_image_path(folder=synologyInkyComicPath)
+            show_image(random_image)
         elif label == "D":
             # Button D: Shutdown the Raspberry Pi
             print("Shutdown button pressed! Shutting down in 2 seconds...")
