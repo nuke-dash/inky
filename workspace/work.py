@@ -272,6 +272,53 @@ def setup_buttons():
     # Request the lines, *whew*
     request = chip.request_lines(consumer="spectra6-buttons", config=line_config)
 
+    # Button press tracking
+    button_state = {label: {"last_press": 0, "press_count": 0, "timer": None} for label in LABELS}
+    DOUBLE_PRESS_TIMEOUT = 0.6  # 600ms window for double press
+    DEBOUNCE_TIME = 0.2  # 200ms debounce
+
+    def execute_single_press(label):
+        """Handle single press action after timeout."""
+        print(f"Single press on button {label}")
+        
+        if label == "A":
+            # Button A single: Show random image
+            print("Fetching random image...")
+            random_image = get_random_image_path(folder=synologyInkyPath)
+            show_image(random_image)
+        elif label == "B":
+            # Button B single: Show latest image
+            print("Fetching latest image...")
+            latest_image = get_latest_image_path(folder=synologyInkyPath)
+            show_image(latest_image)
+        elif label == "C":
+            # Button C single: Show random comic
+            print("Fetching random comic...")
+            random_image = get_random_image_path(folder=synologyInkyComicPath)
+            show_image(random_image)
+        elif label == "D":
+            # Button D single: Shutdown
+            print("Shutdown button pressed! Shutting down in 2 seconds...")
+            stop_led_blinking()
+            set_led(False)
+            time.sleep(2)
+            os.system("sudo shutdown -h now")
+
+    def execute_double_press(label):
+        """Handle double press action."""
+        print(f"Double press on button {label}")
+        
+        if label == "A":
+            print("Not implemented: Double press on A")
+        elif label == "B":
+            print("Not implemented: Double press on B")
+        elif label == "C":
+            # Button C double: Show latest comic
+            print("Fetching latest comic...")
+            latest_image = get_latest_image_path(folder=synologyInkyComicPath)
+            show_image(latest_image)
+        elif label == "D":
+            print("Not implemented: Double press on D")
 
     # "handle_button" will be called every time a button is pressed
     # It receives one argument: the associated gpiod event object.
@@ -279,37 +326,41 @@ def setup_buttons():
         index = OFFSETS.index(event.line_offset)
         gpio_number = BUTTONS[index]
         label = LABELS[index]
-        print(f"Button press detected on GPIO #{gpio_number} label: {label}")
+        current_time = time.time()
         
-        if label == "A":
-            # Button A: Show random image
-            print("Fetching random image...")
-            random_image = get_random_image_path(folder=synologyInkyPath)
-            show_image(random_image)
-        elif label == "B":
-            # Button B: Show latest image
-            print("Fetching latest image...")
-            latest_image = get_latest_image_path(folder=synologyInkyPath)
-            show_image(latest_image)
-        if label == "C":
-            # Button A: Show random comic
-            print("Fetching random image...")
-            random_image = get_random_image_path(folder=synologyInkyComicPath)
-            show_image(random_image)
-        elif label == "D":
-            # Button D: Shutdown the Raspberry Pi
-            print("Shutdown button pressed! Shutting down in 2 seconds...")
-            stop_led_blinking()
-            set_led(False)
-            time.sleep(2)
-            os.system("sudo shutdown -h now")
+        # Debounce check
+        if current_time - button_state[label]["last_press"] < DEBOUNCE_TIME:
+            return
+        
+        print(f"Button press detected on GPIO #{gpio_number} label: {label}")
+        button_state[label]["last_press"] = current_time
+        button_state[label]["press_count"] += 1
+        
+        # Cancel existing timer if any
+        if button_state[label]["timer"]:
+            button_state[label]["timer"].cancel()
+        
+        # Check if this is a double press
+        if button_state[label]["press_count"] == 2:
+            button_state[label]["press_count"] = 0
+            execute_double_press(label)
+        else:
+            # Set timer to execute single press if no second press comes
+            def timeout_handler():
+                if button_state[label]["press_count"] == 1:
+                    execute_single_press(label)
+                button_state[label]["press_count"] = 0
+            
+            button_state[label]["timer"] = threading.Timer(DOUBLE_PRESS_TIMEOUT, timeout_handler)
+            button_state[label]["timer"].start()
 
     # Start LED blinking while waiting for button presses
     start_led_blinking()
     print("Ready! LED is blinking.")
-    print("Press button A for random image")
-    print("Press button B for latest image.")
-    print("Press button D to shutdown the Raspberry Pi.")
+    print("Press button A once for random image")
+    print("Press button B once for latest image")
+    print("Press button C once for random comic, twice for latest comic")
+    print("Press button D once to shutdown")
 
     while True:
         for event in request.read_edge_events():
